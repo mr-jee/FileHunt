@@ -3,10 +3,11 @@ from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 import os
 
-starting_directory = "D:\\"
+STARTING_DIRECTORY = "D:\\"
 
 
 def scan_files(directory):
+    # scan filesystem
     file_list = []
 
     with ThreadPoolExecutor() as executor:
@@ -21,12 +22,35 @@ def scan_files(directory):
 
 
 def save_to_csv(file_list, csv_file):
+    # save the scanned file into a csv
     df = pd.DataFrame(file_list, columns=['Name', 'Address', 'Type'])
     df.sort_values("Type", axis=0, ascending=True, inplace=True, na_position='first')
     df.to_csv(csv_file, index=False)
 
 
-files = scan_files(starting_directory)
+def search():
+    matching_results = []
+    try:
+        # convert csv to dataframe for search
+        df = pd.read_csv('list_of_files.csv')
+
+    except FileNotFoundError:
+        scan_files(STARTING_DIRECTORY)
+
+    user_input = searchbox_entry.get()
+    for index, row in df.iterrows():
+        if user_input.lower() in row['Name'].lower():
+            matching_results.append((row['Name'], row['Address'], row['Type']))
+    if matching_results:
+        for index, row in enumerate(matching_results,1):
+            result_list.insert(END, f"{index}. {row}")
+    else:
+        print('No matching results found.')
+
+
+
+
+files = scan_files(STARTING_DIRECTORY)
 
 csv_file = 'list_of_files.csv'
 save_to_csv(files, csv_file)
@@ -50,7 +74,7 @@ searchbox_entry = Entry(width=70)
 searchbox_entry.grid(row=1, column=0, columnspan=2)
 searchbox_entry.focus()
 
-search_btn = Button(text='Search')
+search_btn = Button(text='Search', command=search)
 search_btn.grid(row=1, column=2, padx=5, pady=5)
 
 result_list = Listbox(width=90, height=10)

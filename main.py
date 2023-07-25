@@ -4,29 +4,52 @@ from tkinter import ttk
 from concurrent.futures import ThreadPoolExecutor
 import pandas as pd
 import os
-
-# Automatically detect the system drive and set STARTING_DIRECTORY
-STARTING_DIRECTORY = os.path.join(os.path.abspath(os.sep), "")  # The directory to start scanning from.
+import psutil
 
 
-def scan_files(directory):
+def get_partitions():
+    """
+    Function to get all partitions on the system.
+
+    Returns:
+        list: A list of tuples containing partition information.
+              Each tuple consists of (device, mountpoint, fstype).
+    """
+    partitions = psutil.disk_partitions(all=True)
+    # Get the list of disk partitions on the system using psutil.disk_partitions().
+
+    partition_info = []  # List to store the partition information as tuples.
+    for partition in partitions:
+        device = partition.device  # Get the partition device (e.g., '/dev/sda1', 'C:')
+        partition_info.append(device)
+        # Append the tuple containing partition information to the list.
+
+    return partition_info
+    # Return the list containing tuples of partition information (device, mountpoint, fstype).
+
+
+def scan_files(starting_directory):
     # Function to scan the filesystem and retrieve file and directory information.
     file_list = []  # List to store file and directory details.
 
-    with ThreadPoolExecutor() as executor:
-        for root, dirs, files in os.walk(directory):
-            for file_name in files:
-                file_path = os.path.join(root, file_name)
-                file_list.append((file_name, file_path, "file"))  # Append file details to the list.
-            for dir_name in dirs:
-                dir_path = os.path.join(root, dir_name)
-                file_list.append((dir_name, dir_path, "directory"))  # Append directory details to the list.
+    for root, dirs, files in os.walk(starting_directory):
+        for file_name in files:
+            file_path = os.path.join(root, file_name)
+            file_list.append((file_name, file_path, "file"))  # Append file details to the list.
+        for dir_name in dirs:
+            dir_path = os.path.join(root, dir_name)
+            file_list.append((dir_name, dir_path, "directory"))  # Append directory details to the list.
+
     return file_list  # Return the list containing file and directory information.
 
 
 def save_to_csv(file_list, csv_file):
     # Function to save the scanned files into a CSV file.
     df = pd.DataFrame(file_list, columns=['Name', 'Address', 'Type'])  # Create a DataFrame from the file_list.
+
+    # Convert the 'Name' column to strings to avoid AttributeError in search.
+    df['Name'] = df['Name'].astype(str)
+
     df.sort_values("Type", axis=0, ascending=True, inplace=True, na_position='first')  # Sort the DataFrame by 'Type'.
     df.to_csv(csv_file, index=False)  # Save the DataFrame to the CSV file without index.
 
@@ -34,15 +57,23 @@ def save_to_csv(file_list, csv_file):
 def search(event):  # event is for hit the Enter key
     # Function to search for matching results in the CSV file.
     matching_results = []
+    global partitions
     try:
         df = pd.read_csv('list_of_files.csv')  # Read the CSV file into a DataFrame for search.
     except FileNotFoundError:
-        scan_files(STARTING_DIRECTORY)  # Scan files if the CSV file is not found.
+        file_list = scan_files(partitions)  # Scan files if the CSV file is not found.
+        save_to_csv(file_list, 'list_of_files.csv')
+        df = pd.read_csv('list_of_files.csv')  # Read the CSV file into a DataFrame after saving.
 
     user_input = searchbox_entry.get()  # Get the user input for search.
     for index, row in df.iterrows():
-        if user_input.lower() in row['Name'].lower():
-            matching_results.append((row['Name'], row['Address'], row['Type']))  # Append matching results to list.
+        try:
+            name = row['Name'].lower()  # Convert the 'Name' value to lowercase.
+            if user_input in name:
+                matching_results.append((row['Name'], row['Address'], row['Type']))  # Append matching results to list.
+        except AttributeError:
+            continue  # Ignore the row and continue with the next one.
+    result_list.delete(*result_list.get_children())
     if matching_results:
         for index, row in enumerate(matching_results, 1):
             result_list.insert("", "end",
@@ -52,10 +83,14 @@ def search(event):  # event is for hit the Enter key
                              message="No matching results found.")  # Print a message if no matching results are found.
 
 
-files = scan_files(STARTING_DIRECTORY)  # Scan files from the starting directory.
+partitions = get_partitions()
+all_files = []
+for partition in partitions:
+    files = scan_files(partition)  # Scan files from the starting directory.
+    all_files.extend(files)
 
 csv_file = 'list_of_files.csv'  # CSV file to store the scanned file list.
-save_to_csv(files, csv_file)  # Save the scanned files to the CSV file.
+save_to_csv(all_files, csv_file)  # Save the scanned files to the CSV file.
 
 # ------------------ UI&UX -------------------- #
 BACKGROUND_COLOR = "#B1DDC6"

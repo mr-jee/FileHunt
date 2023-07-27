@@ -3,6 +3,7 @@ import pandas as pd
 import os
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
+from prettytable import from_csv, PrettyTable
 
 
 def fetch_partitions():
@@ -11,7 +12,6 @@ def fetch_partitions():
     partition_list = []
     for partition in partitions:
         partition_list.append(partition.device)
-    print(partition_list)
     return partition_list
 
 
@@ -31,7 +31,7 @@ def update_database():
     if os.path.exists('./list_of_files.csv'):
         # rename it with the current date, so we can understand when file updated
         current_time = datetime.now().strftime("%Y_%m_%d")
-        os.rename('list_of_files.csv', f"{current_time}.csv")
+        os.rename('list_of_files.csv', f"{current_time}_log.csv")
     list_of_scanned_files = []
     for partition in fetch_partitions():
         list_of_scanned_files.extend(scan_filesystem(partition))
@@ -43,4 +43,36 @@ def update_database():
     df.to_csv("list_of_files.csv", index=False)
 
 
-update_database()
+def search():
+    """Takes user input and look for it in database"""
+    matching_results = []
+    user_input = input("Enter the word: ").lower()
+    if os.path.exists('./list_of_files.csv'):
+        df = pd.read_csv('list_of_files.csv')
+        for index, row in df.iterrows():
+            try:
+                name = row['Name'].lower()  # Convert the 'Name' value to lowercase.
+                if user_input in name:
+                    matching_results.append(
+                        (row['Name'], row['Address'], row['Type']))  # Append matching results to list.
+            except AttributeError:
+                continue  # Ignore the row and continue with the next one.
+        if matching_results:
+            show_in_table(matching_results)
+            return matching_results
+        else:
+            print("No Match Found!")
+    else:
+        update_database()
+
+def show_in_table(result):
+    """Showing the results of search in PrettyTable"""
+    table = PrettyTable()
+    # table headers
+    table.field_names = ["Index", "Name", "Address", "Type"]
+    # loop through in result and add each row
+    for index, row in enumerate(result, start=1):  # enumerate is used to fill index and index starts from 1
+        table.add_row([index] + list(row))  # convert the row from a tuple into a list and concatenate it with index
+    print(table)
+
+search()
